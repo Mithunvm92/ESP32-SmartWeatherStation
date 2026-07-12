@@ -126,17 +126,20 @@ void WiFiManagerExt::printStatus() const {
 }
 
 bool WiFiManagerExt::begin() {
-    // Immediate serial output
     Serial.println("");
     Serial.println("****************************************");
     Serial.println("*       WiFiManagerExt::begin()        *");
     Serial.println("****************************************");
     Serial.println("");
     
-    // Store instance for callbacks
     g_wifiInstance = this;
     
-    // Create WiFiManager - DON'T mess with WiFi mode before this
+    // On ESP32-C3, explicitly disable WiFi first to reset state
+    WiFi.mode(WIFI_OFF);
+    delay(200);
+    
+    Serial.println("[WiFi] WiFi disabled, creating WiFiManager...");
+    
     WiFiManager wm;
     
     // Configure portal - NEVER timeout
@@ -144,7 +147,7 @@ bool WiFiManagerExt::begin() {
     wm.setConnectTimeout(15);
     wm.setBreakAfterConfig(true);
     
-    // AP callback - this fires when portal opens
+    // AP callback
     wm.setAPCallback([](WiFiManager* wmPtr) {
         Serial.println("");
         Serial.println("========================================");
@@ -153,40 +156,33 @@ bool WiFiManagerExt::begin() {
         Serial.println("SSID: " + String(wmPtr->getConfigPortalSSID()));
         Serial.println("Password: weather123");
         Serial.println("IP: 192.168.4.1");
-        Serial.println("");
-        Serial.println("Look for this network on your phone!");
         Serial.println("========================================");
         Serial.println("");
         if (g_wifiInstance) g_wifiInstance->portalActive_ = true;
     });
     
-    // Save callback
     wm.setSaveConfigCallback([]() {
-        Serial.println("[WiFi] *** CREDENTIALS SAVED TO FLASH ***");
+        Serial.println("[WiFi] *** CREDENTIALS SAVED ***");
     });
     
-    Serial.println("[WiFi] Starting WiFiManager...");
-    Serial.println("[WiFi] This will open portal if no saved WiFi");
+    Serial.println("[WiFi] Calling startConfigPortal directly...");
+    Serial.println("[WiFi] Expected SSID: " + String(WIFI_AP_NAME));
     Serial.println("");
     
-    // This autoConnect will:
-    // - If saved WiFi exists: try to connect
-    // - If no saved WiFi: return false and portal should be running
-    bool connected = wm.autoConnect(WIFI_AP_NAME, WIFI_AP_PASSWORD);
+    // Start portal directly - no autoConnect
+    bool connected = wm.startConfigPortal(WIFI_AP_NAME, WIFI_AP_PASSWORD);
     
-    Serial.println("[WiFi] autoConnect returned: " + String(connected));
+    Serial.println("[WiFi] startConfigPortal returned: " + String(connected));
     Serial.println("[WiFi] WiFi status: " + String(WiFi.status()));
-    Serial.println("");
     
     if (connected && WiFi.status() == WL_CONNECTED) {
-        // Success!
         portalActive_ = false;
+        Serial.println("");
         Serial.println("========================================");
         Serial.println("    WiFi CONNECTED!                    ");
         Serial.println("========================================");
         Serial.println("SSID: " + WiFi.SSID());
         Serial.println("IP: " + WiFi.localIP().toString());
-        Serial.println("RSSI: " + String(WiFi.RSSI()) + " dBm");
         Serial.println("========================================");
         Serial.println("");
         
@@ -196,43 +192,19 @@ bool WiFiManagerExt::begin() {
         return true;
     }
     
-    // autoConnect failed - start config portal explicitly
-    Serial.println("");
-    Serial.println("========================================");
-    Serial.println("  Starting Config Portal...            ");
-    Serial.println("========================================");
-    Serial.println("SSID: " + String(WIFI_AP_NAME));
-    Serial.println("Password: weather123");
-    Serial.println("");
-    Serial.println("Should appear in WiFi networks now!");
-    Serial.println("========================================");
-    Serial.println("");
-    
-    // startConfigPortal will block until connected
-    // It opens its own AP
+    // If portal closed without connecting
+    Serial.println("[WiFi] Retrying portal...");
     connected = wm.startConfigPortal(WIFI_AP_NAME, WIFI_AP_PASSWORD);
-    
-    Serial.println("[WiFi] startConfigPortal returned: " + String(connected));
     
     if (connected && WiFi.status() == WL_CONNECTED) {
         portalActive_ = false;
-        Serial.println("");
-        Serial.println("========================================");
-        Serial.println("  WiFi CONNECTED AFTER CONFIG!       ");
-        Serial.println("========================================");
-        Serial.println("SSID: " + WiFi.SSID());
-        Serial.println("IP: " + WiFi.localIP().toString());
-        Serial.println("========================================");
-        Serial.println("");
-        
+        Serial.println("[WiFi] Connected on retry!");
         wasConnected_ = true;
         reconnectAttempts_ = 0;
-        connectedSinceEpoch_ = time(nullptr);
         return true;
     }
     
-    // Shouldn't reach here with timeout=0, but just in case
-    Serial.println("[WiFi] Portal closed, rebooting...");
+    Serial.println("[WiFi] Failed, rebooting...");
     delay(1000);
     ESP.restart();
     return false;
