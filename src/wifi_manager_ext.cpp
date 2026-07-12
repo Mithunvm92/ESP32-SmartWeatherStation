@@ -134,48 +134,52 @@ bool WiFiManagerExt::begin() {
     
     g_wifiInstance = this;
     
-    // On ESP32-C3, explicitly disable WiFi first to reset state
+    // Reset WiFi
     WiFi.mode(WIFI_OFF);
     delay(200);
+    WiFi.mode(WIFI_STA);
     
-    Serial.println("[WiFi] WiFi disabled, creating WiFiManager...");
+    Serial.println("[WiFi] WiFi reset, creating WiFiManager...");
     
     WiFiManager wm;
     
-    // Configure portal - NEVER timeout
-    wm.setConfigPortalTimeout(0);
+    // MINIMAL CONFIG - just timeout settings
+    wm.setConfigPortalTimeout(0);  // Never timeout
     wm.setConnectTimeout(15);
-    wm.setBreakAfterConfig(true);
     
     // AP callback
     wm.setAPCallback([](WiFiManager* wmPtr) {
         Serial.println("");
         Serial.println("========================================");
-        Serial.println("       SETUP PORTAL OPEN!             ");
+        Serial.println("   SETUP PORTAL OPEN!                 ");
         Serial.println("========================================");
         Serial.println("SSID: " + String(wmPtr->getConfigPortalSSID()));
         Serial.println("Password: weather123");
         Serial.println("IP: 192.168.4.1");
+        Serial.println("");
+        Serial.println("Open browser to 192.168.4.1");
         Serial.println("========================================");
         Serial.println("");
         if (g_wifiInstance) g_wifiInstance->portalActive_ = true;
     });
     
     wm.setSaveConfigCallback([]() {
-        Serial.println("[WiFi] *** CREDENTIALS SAVED ***");
+        Serial.println("");
+        Serial.println("!!! CREDENTIALS SAVED !!!");
+        Serial.println("");
     });
     
-    Serial.println("[WiFi] Calling startConfigPortal directly...");
-    Serial.println("[WiFi] Expected SSID: " + String(WIFI_AP_NAME));
+    Serial.println("[WiFi] Starting portal...");
+    Serial.println("[WiFi] SSID: " + String(WIFI_AP_NAME));
     Serial.println("");
     
-    // Start portal directly - no autoConnect
+    // Start portal
     bool connected = wm.startConfigPortal(WIFI_AP_NAME, WIFI_AP_PASSWORD);
     
-    Serial.println("[WiFi] startConfigPortal returned: " + String(connected));
+    Serial.println("[WiFi] Portal returned: " + String(connected));
     Serial.println("[WiFi] WiFi status: " + String(WiFi.status()));
     
-    if (connected && WiFi.status() == WL_CONNECTED) {
+    if (WiFi.status() == WL_CONNECTED) {
         portalActive_ = false;
         Serial.println("");
         Serial.println("========================================");
@@ -192,19 +196,26 @@ bool WiFiManagerExt::begin() {
         return true;
     }
     
-    // If portal closed without connecting
-    Serial.println("[WiFi] Retrying portal...");
-    connected = wm.startConfigPortal(WIFI_AP_NAME, WIFI_AP_PASSWORD);
+    // Check if portal is still running, wait for connection
+    Serial.println("[WiFi] Waiting for WiFi connection...");
+    unsigned long startWait = millis();
+    while (WiFi.status() != WL_CONNECTED && (millis() - startWait < 60000)) {
+        delay(100);
+        yield();
+        if (millis() % 5000 == 0) {
+            Serial.println("[WiFi] Still waiting... Status: " + String(WiFi.status()));
+        }
+    }
     
-    if (connected && WiFi.status() == WL_CONNECTED) {
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("[WiFi] Connected after waiting!");
         portalActive_ = false;
-        Serial.println("[WiFi] Connected on retry!");
         wasConnected_ = true;
         reconnectAttempts_ = 0;
         return true;
     }
     
-    Serial.println("[WiFi] Failed, rebooting...");
+    Serial.println("[WiFi] No connection, rebooting...");
     delay(1000);
     ESP.restart();
     return false;
