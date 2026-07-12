@@ -1,11 +1,15 @@
 #include "wifi_manager_ext.h"
 #include <WiFiManager.h>
 #include <esp_wifi.h>
+#include "nvs_flash.h"
 #include "config.h"
 #include "constants.h"
 #include "logger.h"
 
 static const char* TAG = "WiFi";
+
+// Global pointer for callback access
+static WiFiManagerExt* g_wifiInstance = nullptr;
 
 // ============================================================================
 // Serial Command Handler
@@ -21,8 +25,7 @@ void handleWiFiSerialCommand(const String& cmd) {
     } 
     else if (cmd.equalsIgnoreCase("status")) {
         Logger::info(TAG, ">>> Serial command: status");
-        WiFiManagerExt wm;
-        wm.printStatus();
+        if (g_wifiInstance) g_wifiInstance->printStatus();
     } 
     else if (cmd.equalsIgnoreCase("reboot")) {
         Logger::warning(TAG, ">>> Serial command: reboot");
@@ -128,6 +131,9 @@ bool WiFiManagerExt::begin() {
     Logger::info(TAG, "*       WiFiManagerExt::begin()        *");
     Logger::info(TAG, "****************************************");
     
+    // Store instance for callbacks
+    g_wifiInstance = this;
+    
     // Step 1: Reset WiFi state to ensure clean start
     resetWiFiState();
     
@@ -141,14 +147,11 @@ bool WiFiManagerExt::begin() {
     // Step 4: Configure portal timeout - 0 = never timeout during debugging
     wm.setConfigPortalTimeout(0);  // NEVER TIMEOUT while debugging
     wm.setConnectTimeout(30);
-    wm.setRetryAP(3);
     wm.setBreakAfterConfig(true);
-    wm.setShowPassword(true);
-    wm.setScanDelayForWidget(500);
     
     // Step 5: Configure AP callback with enhanced logging
     wm.setAPCallback([](WiFiManager* wmPtr) {
-        portalActive_ = true;
+        if (g_wifiInstance) g_wifiInstance->portalActive_ = true;
         Logger::info(TAG, "");
         Logger::info(TAG, "====================================");
         Logger::info(TAG, "       SETUP PORTAL ACTIVE         ");
@@ -276,12 +279,11 @@ void WiFiManagerExt::launchConfigPortal() {
     // Never timeout in portal mode
     wm.setConfigPortalTimeout(0);
     wm.setConnectTimeout(30);
-    wm.setRetryAP(3);
     wm.setBreakAfterConfig(true);
     
     // Enhanced AP callback
     wm.setAPCallback([](WiFiManager* wmPtr) {
-        portalActive_ = true;
+        if (g_wifiInstance) g_wifiInstance->portalActive_ = true;
         Logger::info(TAG, "");
         Logger::info(TAG, "====================================");
         Logger::info(TAG, "       SETUP PORTAL ACTIVE         ");
@@ -338,12 +340,16 @@ void WiFiManagerExt::resetSettings() {
     wm.resetSettings();
     delay(200);
     
-    // Step 3: Clear ESP32 NVS WiFi config directly
-    esp_err_t err = esp_wifi_clear_default_wifi_storage_and_nvs();
+    // Step 3: Clear NVS WiFi namespace
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open("WIFI", NVS_READWRITE, &nvs_handle);
     if (err == ESP_OK) {
+        nvs_erase_all(nvs_handle);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
         Logger::info(TAG, "NVS WiFi storage cleared");
     } else {
-        Logger::warning(TAG, "NVS clear returned: " + String(err));
+        Logger::warning(TAG, "NVS open failed: " + String(err));
     }
     
     // Step 4: Force WiFi off
