@@ -1,0 +1,8 @@
+.pio
+.vscode
+.pioenvs
+.piobuild
+lib
+*.bak
+*.log
+*.tmp
