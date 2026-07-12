@@ -8,8 +8,12 @@
 // ---------------------------------------------------------------------------
 // WiFi / Captive portal
 // ---------------------------------------------------------------------------
+// Hardcoded WiFi credentials - ESP will try these first
+static constexpr char WIFI_SSID[]         = "YOUR_WIFI_SSID";      // Your WiFi name
+static constexpr char WIFI_PASSWORD[]      = "YOUR_WIFI_PASSWORD";  // Your WiFi password
+
+// Setup portal (when WiFi fails)
 static constexpr char WIFI_AP_NAME[]      = "WeatherStation-Setup";
-static constexpr char WIFI_AP_PASSWORD[]  = "weather123";     // min 8 chars
 static constexpr uint32_t WIFI_PORTAL_TIMEOUT_S = 180;        // captive portal timeout
 
 // ---------------------------------------------------------------------------

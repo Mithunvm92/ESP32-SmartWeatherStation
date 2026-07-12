@@ -136,33 +136,65 @@ bool WiFiManagerExt::begin() {
     // Reset WiFi
     WiFi.mode(WIFI_OFF);
     delay(200);
+    WiFi.mode(WIFI_STA);
     
-    Serial.println("Starting WiFi Manager...");
+    Serial.println("Connecting to hardcoded WiFi...");
+    Serial.println("SSID: " + String(WIFI_SSID));
+    
+    // Try hardcoded WiFi credentials first
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    
+    // Wait for connection
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+        delay(500);
+        Serial.print(".");
+        attempts++;
+    }
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        // Connected to hardcoded WiFi!
+        Serial.println("");
+        Serial.println("");
+        Serial.println("========================================");
+        Serial.println("    WiFi CONNECTED!");
+        Serial.println("========================================");
+        Serial.println("SSID: " + WiFi.SSID());
+        Serial.println("IP: " + WiFi.localIP().toString());
+        Serial.println("RSSI: " + String(WiFi.RSSI()) + " dBm");
+        Serial.println("========================================");
+        Serial.println("");
+        
+        portalActive_ = false;
+        wasConnected_ = true;
+        reconnectAttempts_ = 0;
+        connectedSinceEpoch_ = time(nullptr);
+        return true;
+    }
+    
+    // Hardcoded WiFi failed - start WiFiManager portal
+    Serial.println("");
+    Serial.println("Hardcoded WiFi failed!");
+    Serial.println("Starting WiFi Manager portal...");
+    
+    WiFi.mode(WIFI_OFF);
+    delay(200);
     
     WiFiManager wm;
-    
-    // DEBUG OUTPUT
     wm.setDebugOutput(true);
-    
-    // TIMEOUTS - like working code
     wm.setConnectTimeout(20);
-    wm.setConfigPortalTimeout(180);  // 3 minutes timeout
-    
-    // CAPTIVE PORTAL SETTINGS - THE KEY ONES!
+    wm.setConfigPortalTimeout(180);
     wm.setCaptivePortalEnable(true);
     wm.setWiFiAutoReconnect(true);
     
-    // AP callback
     wm.setAPCallback([](WiFiManager* wmPtr) {
         Serial.println("");
         Serial.println("========================================");
         Serial.println("   SETUP PORTAL OPEN!");
         Serial.println("========================================");
         Serial.println("SSID: " + String(wmPtr->getConfigPortalSSID()));
-        Serial.println("Password: (none - open network)");
+        Serial.println("Password: (none)");
         Serial.println("IP: 192.168.4.1");
-        Serial.println("");
-        Serial.println("Connect phone and open browser!");
         Serial.println("========================================");
         Serial.println("");
         if (g_wifiInstance) g_wifiInstance->portalActive_ = true;
@@ -174,28 +206,23 @@ bool WiFiManagerExt::begin() {
         Serial.println("");
     });
     
-    Serial.println("Calling autoConnect...");
-    
-    // USE autoConnect WITHOUT PASSWORD - like working code
-    // If no saved WiFi, creates open AP
-    bool res = wm.autoConnect(WIFI_AP_NAME);  // NO PASSWORD!
+    // Use autoConnect - will open portal if no saved credentials
+    bool res = wm.autoConnect(WIFI_AP_NAME);
     
     if (!res) {
-        Serial.println("autoConnect failed!");
-        Serial.println("Restarting...");
+        Serial.println("Portal timeout - rebooting...");
         delay(3000);
         ESP.restart();
         return false;
     }
     
-    // Connected!
+    // Connected via WiFiManager!
     Serial.println("");
     Serial.println("========================================");
     Serial.println("    WiFi CONNECTED!");
     Serial.println("========================================");
     Serial.println("SSID: " + WiFi.SSID());
     Serial.println("IP: " + WiFi.localIP().toString());
-    Serial.println("RSSI: " + String(WiFi.RSSI()) + " dBm");
     Serial.println("========================================");
     Serial.println("");
     
