@@ -126,21 +126,29 @@ void WiFiManagerExt::printStatus() const {
 }
 
 bool WiFiManagerExt::begin() {
-    Logger::info(TAG, "");
-    Logger::info(TAG, "****************************************");
-    Logger::info(TAG, "*       WiFiManagerExt::begin()        *");
-    Logger::info(TAG, "****************************************");
+    // Immediate serial output
+    Serial.println("");
+    Serial.println("****************************************");
+    Serial.println("*       WiFiManagerExt::begin()        *");
+    Serial.println("****************************************");
+    Serial.println("");
+    
+    Logger::info(TAG, "WiFiManagerExt::begin() called");
     
     // Store instance for callbacks
     g_wifiInstance = this;
     
     // Step 1: Reset WiFi state completely
+    Serial.println("[WiFi] Resetting WiFi state...");
     WiFi.mode(WIFI_STA);
     WiFi.disconnect(true);
     delay(100);
     
     // Step 2: Log current state
-    logCurrentWiFiState();
+    Serial.println("[WiFi] Current state:");
+    Serial.println("[WiFi] - Status: " + String(WiFi.status()));
+    Serial.println("[WiFi] - MAC: " + WiFi.macAddress());
+    Serial.println("");
     
     // Step 3: Create WiFiManager and configure
     WiFiManager wm;

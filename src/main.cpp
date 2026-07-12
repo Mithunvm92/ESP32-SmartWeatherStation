@@ -59,20 +59,35 @@ static void taskSerialCommands() {
 // ---------------------------------------------------------------------------
 void setup() {
     Serial.begin(115200);
-    delay(300);
-    Logger::setMinLevel(LogLevel::INFO);
+    delay(500);
+    
+    // Immediate output before any initialization
+    Serial.println("");
+    Serial.println("========================================");
+    Serial.println("ESP32 Smart Weather Station - BOOTING");
+    Serial.println("========================================");
+    Serial.println("");
 
-    Logger::info("Main", "========================================");
-    Logger::info("Main", "ESP32 Smart Weather Station");
-    Logger::info("Main", "========================================");
+    Logger::setMinLevel(LogLevel::DEBUG);
+
+    Logger::info("Main", "System starting...");
+    Logger::info("Main", String("Free heap: ") + ESP.getFreeHeap());
 
     // WiFi (blocking during initial connect or portal)
-    Logger::info("Main", "Initializing WiFi...");
-    g_wifi.begin();
-    Logger::info("Main", String("WiFi connected. IP: ") + g_wifi.ip());
+    Logger::info("Main", "Calling WiFi begin...");
+    Serial.println("[Main] About to call g_wifi.begin()");
+    
+    bool wifiResult = g_wifi.begin();
+    
+    Serial.println("[Main] WiFi begin returned: " + String(wifiResult));
+    Serial.println("[Main] WiFi IP: " + g_wifi.ip());
+    Logger::info("Main", String("WiFi connected! IP: ") + g_wifi.ip());
 
     Logger::info("Main", "Setup complete!");
-    Logger::info("Main", "Commands: resetwifi, status, reboot, heap");
+    Serial.println("");
+    Serial.println("========================================");
+    Serial.println("Setup complete - entering loop");
+    Serial.println("========================================");
 }
 
 // ---------------------------------------------------------------------------
