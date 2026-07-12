@@ -133,70 +133,62 @@ bool WiFiManagerExt::begin() {
     Serial.println("****************************************");
     Serial.println("");
     
-    Logger::info(TAG, "WiFiManagerExt::begin() called");
-    
     // Store instance for callbacks
     g_wifiInstance = this;
     
-    // Step 1: Reset WiFi state completely
-    Serial.println("[WiFi] Resetting WiFi state...");
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect(true);
-    delay(100);
-    
-    // Step 2: Log current state
-    Serial.println("[WiFi] Current state:");
-    Serial.println("[WiFi] - Status: " + String(WiFi.status()));
-    Serial.println("[WiFi] - MAC: " + WiFi.macAddress());
-    Serial.println("");
-    
-    // Step 3: Create WiFiManager and configure
+    // Create WiFiManager - DON'T mess with WiFi mode before this
     WiFiManager wm;
     
-    // Never timeout - debug mode
+    // Configure portal - NEVER timeout
     wm.setConfigPortalTimeout(0);
     wm.setConnectTimeout(15);
     wm.setBreakAfterConfig(true);
     
-    // AP callback
+    // AP callback - this fires when portal opens
     wm.setAPCallback([](WiFiManager* wmPtr) {
+        Serial.println("");
+        Serial.println("========================================");
+        Serial.println("       SETUP PORTAL OPEN!             ");
+        Serial.println("========================================");
+        Serial.println("SSID: " + String(wmPtr->getConfigPortalSSID()));
+        Serial.println("Password: weather123");
+        Serial.println("IP: 192.168.4.1");
+        Serial.println("");
+        Serial.println("Look for this network on your phone!");
+        Serial.println("========================================");
+        Serial.println("");
         if (g_wifiInstance) g_wifiInstance->portalActive_ = true;
-        Logger::info(TAG, "");
-        Logger::info(TAG, "====================================");
-        Logger::info(TAG, "       SETUP PORTAL ACTIVE         ");
-        Logger::info(TAG, "====================================");
-        Logger::info(TAG, String("SSID: ") + wmPtr->getConfigPortalSSID());
-        Logger::info(TAG, "Password: weather123");
-        Logger::info(TAG, "IP: 192.168.4.1");
-        Logger::info(TAG, "Connect phone to this AP!");
-        Logger::info(TAG, "====================================");
-        Logger::info(TAG, "");
     });
     
     // Save callback
     wm.setSaveConfigCallback([]() {
-        Logger::info(TAG, "*** CREDENTIALS SAVED ***");
+        Serial.println("[WiFi] *** CREDENTIALS SAVED TO FLASH ***");
     });
     
-    Logger::info(TAG, "");
+    Serial.println("[WiFi] Starting WiFiManager...");
+    Serial.println("[WiFi] This will open portal if no saved WiFi");
+    Serial.println("");
     
-    // Step 4: Try saved credentials first
-    Logger::info(TAG, ">>> Trying saved WiFi...");
-    
+    // This autoConnect will:
+    // - If saved WiFi exists: try to connect
+    // - If no saved WiFi: return false and portal should be running
     bool connected = wm.autoConnect(WIFI_AP_NAME, WIFI_AP_PASSWORD);
+    
+    Serial.println("[WiFi] autoConnect returned: " + String(connected));
+    Serial.println("[WiFi] WiFi status: " + String(WiFi.status()));
+    Serial.println("");
     
     if (connected && WiFi.status() == WL_CONNECTED) {
         // Success!
         portalActive_ = false;
-        Logger::info(TAG, "");
-        Logger::info(TAG, "====================================");
-        Logger::info(TAG, "    WiFi CONNECTED!                ");
-        Logger::info(TAG, "====================================");
-        Logger::info(TAG, String("SSID: ") + WiFi.SSID());
-        Logger::info(TAG, String("IP: ") + WiFi.localIP().toString());
-        Logger::info(TAG, String("RSSI: ") + WiFi.RSSI() + " dBm");
-        Logger::info(TAG, "====================================");
-        Logger::info(TAG, "");
+        Serial.println("========================================");
+        Serial.println("    WiFi CONNECTED!                    ");
+        Serial.println("========================================");
+        Serial.println("SSID: " + WiFi.SSID());
+        Serial.println("IP: " + WiFi.localIP().toString());
+        Serial.println("RSSI: " + String(WiFi.RSSI()) + " dBm");
+        Serial.println("========================================");
+        Serial.println("");
         
         wasConnected_ = true;
         reconnectAttempts_ = 0;
@@ -204,29 +196,34 @@ bool WiFiManagerExt::begin() {
         return true;
     }
     
-    // Step 5: No saved creds or connection failed - start portal
-    Logger::warning(TAG, "");
-    Logger::warning(TAG, "====================================");
-    Logger::warning(TAG, "   No saved WiFi / Connection failed");
-    Logger::warning(TAG, "   Starting Setup Portal...         ");
-    Logger::warning(TAG, "====================================");
-    Logger::warning(TAG, String("AP SSID: ") + WIFI_AP_NAME);
-    Logger::warning(TAG, "AP Password: weather123");
-    Logger::warning(TAG, "AP IP: 192.168.4.1");
-    Logger::warning(TAG, "");
+    // autoConnect failed - start config portal explicitly
+    Serial.println("");
+    Serial.println("========================================");
+    Serial.println("  Starting Config Portal...            ");
+    Serial.println("========================================");
+    Serial.println("SSID: " + String(WIFI_AP_NAME));
+    Serial.println("Password: weather123");
+    Serial.println("");
+    Serial.println("Should appear in WiFi networks now!");
+    Serial.println("========================================");
+    Serial.println("");
     
-    // Start config portal - blocks until connected or timeout(0=never)
+    // startConfigPortal will block until connected
+    // It opens its own AP
     connected = wm.startConfigPortal(WIFI_AP_NAME, WIFI_AP_PASSWORD);
+    
+    Serial.println("[WiFi] startConfigPortal returned: " + String(connected));
     
     if (connected && WiFi.status() == WL_CONNECTED) {
         portalActive_ = false;
-        Logger::info(TAG, "");
-        Logger::info(TAG, "====================================");
-        Logger::info(TAG, "  WiFi CONNECTED AFTER CONFIG!    ");
-        Logger::info(TAG, "====================================");
-        Logger::info(TAG, String("SSID: ") + WiFi.SSID());
-        Logger::info(TAG, String("IP: ") + WiFi.localIP().toString());
-        Logger::info(TAG, "====================================");
+        Serial.println("");
+        Serial.println("========================================");
+        Serial.println("  WiFi CONNECTED AFTER CONFIG!       ");
+        Serial.println("========================================");
+        Serial.println("SSID: " + WiFi.SSID());
+        Serial.println("IP: " + WiFi.localIP().toString());
+        Serial.println("========================================");
+        Serial.println("");
         
         wasConnected_ = true;
         reconnectAttempts_ = 0;
@@ -234,12 +231,11 @@ bool WiFiManagerExt::begin() {
         return true;
     }
     
-    // Portal closed without connecting - shouldn't happen with timeout=0
-    // But just in case, restart portal
-    Logger::warning(TAG, "Portal closed, restarting portal...");
+    // Shouldn't reach here with timeout=0, but just in case
+    Serial.println("[WiFi] Portal closed, rebooting...");
     delay(1000);
     ESP.restart();
-    return false; // never reached
+    return false;
 }
 
 void WiFiManagerExt::checkConnection() {
