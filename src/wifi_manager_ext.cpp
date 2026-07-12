@@ -166,7 +166,7 @@ bool WiFiManagerExt::begin() {
     
     // Step 6: Configure save config callback
     wm.setSaveConfigCallback([]() {
-        Logger::info(TAG, "*** Credentials saved to NVS ***");
+        Logger::info(TAG, "*** CREDENTIALS SAVED TO NVS ***");
     });
     
     // Step 7: Try autoConnect with saved credentials first
@@ -176,7 +176,7 @@ bool WiFiManagerExt::begin() {
     
     bool ok = wm.autoConnect(WIFI_AP_NAME, WIFI_AP_PASSWORD);
     
-    if (ok) {
+    if (ok && WiFi.status() == WL_CONNECTED) {
         // Connected successfully
         portalActive_ = false;
         Logger::info(TAG, "");
@@ -196,27 +196,34 @@ bool WiFiManagerExt::begin() {
         return true;
     }
     
-    // autoConnect failed - portal should be active if we get here
-    // DO NOT reboot - stay in portal mode
+    // If we get here, either no saved creds or connection failed
+    // Check if portal is running
     Logger::warning(TAG, "");
     Logger::warning(TAG, "====================================");
-    Logger::warning(TAG, "    Connection failed / Portal     ");
-    Logger::warning(TAG, "    staying in config portal        ");
+    Logger::warning(TAG, "    Opening setup portal...         ");
     Logger::warning(TAG, "====================================");
-    Logger::warning(TAG, "Waiting for user configuration...");
     Logger::warning(TAG, "Portal SSID: WeatherStation-Setup");
+    Logger::warning(TAG, "Portal Password: weather123");
     Logger::warning(TAG, "Portal IP: 192.168.4.1");
     Logger::warning(TAG, "");
     
-    // Block here in portal mode - will return when user configures
-    while (1) {
+    // Block in portal mode - stays open until user configures
+    // DO NOT return from this function until connected or portal closes
+    while (true) {
         delay(100);
         yield();
         
-        // Check if we somehow got connected (edge case)
+        // Check if connected after user saves credentials
         if (WiFi.status() == WL_CONNECTED) {
-            Logger::info(TAG, ">>> Somehow connected while in portal loop!");
             portalActive_ = false;
+            Logger::info(TAG, "");
+            Logger::info(TAG, "====================================");
+            Logger::info(TAG, "   WiFi CONNECTED AFTER CONFIG!   ");
+            Logger::info(TAG, "====================================");
+            Logger::info(TAG, String("SSID: ") + WiFi.SSID());
+            Logger::info(TAG, String("IP: ") + WiFi.localIP().toString());
+            Logger::info(TAG, "====================================");
+            
             wasConnected_ = true;
             reconnectAttempts_ = 0;
             connectedSinceEpoch_ = time(nullptr);
