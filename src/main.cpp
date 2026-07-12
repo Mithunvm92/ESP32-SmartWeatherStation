@@ -3,6 +3,9 @@
 // ============================================================================
 
 #include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_GFX.h>
 
 #include "config.h"
 #include "constants.h"
@@ -10,9 +13,67 @@
 #include "wifi_manager_ext.h"
 
 // ---------------------------------------------------------------------------
+// Display Setup
+// ---------------------------------------------------------------------------
+#define SCREEN_WIDTH   128
+#define SCREEN_HEIGHT  64
+#define OLED_RESET     -1
+#define I2C_SDA       8   // ESP32-C3 Super Mini
+#define I2C_SCL       10  // ESP32-C3 Super Mini
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// ---------------------------------------------------------------------------
 // Global subsystem instances
 // ---------------------------------------------------------------------------
 WiFiManagerExt g_wifi;
+
+// ---------------------------------------------------------------------------
+// Display Functions
+// ---------------------------------------------------------------------------
+void displayBootScreen(const char* line1, const char* line2 = "", const char* line3 = "") {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println("ESP32 Weather Station");
+    display.drawFastHLine(0, 9, 128, SSD1306_WHITE);
+    
+    int y = 18;
+    if (line1) { display.setCursor(0, y); display.println(line1); y += 10; }
+    if (line2) { display.setCursor(0, y); display.println(line2); y += 10; }
+    if (line3) { display.setCursor(0, y); display.println(line3); }
+    
+    display.display();
+}
+
+void displayWiFiStatus() {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println("=== WiFi STATUS ===");
+    display.drawFastHLine(0, 9, 128, SSD1306_WHITE);
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        display.setCursor(0, 14);
+        display.println("Status: CONNECTED");
+        display.print("IP: ");
+        display.println(WiFi.localIP().toString());
+        display.print("SSID: ");
+        String ssid = WiFi.SSID();
+        if (ssid.length() > 15) ssid = ssid.substring(0, 15);
+        display.println(ssid);
+        display.print("RSSI: ");
+        display.print(WiFi.RSSI());
+        display.println(" dBm");
+    } else {
+        display.setCursor(0, 14);
+        display.println("Status: DISCONNECTED");
+    }
+    
+    display.display();
+}
 
 // ---------------------------------------------------------------------------
 // Serial Commands Task
@@ -26,31 +87,35 @@ static void taskSerialCommands() {
     if (cmd.length() == 0) return;
 
     if (cmd.equalsIgnoreCase("resetwifi")) {
-        Logger::warning("Main", "Serial command: resetwifi - clearing WiFi credentials...");
-        delay(200);
+        Logger::warning("Main", "Serial command: resetwifi");
+        displayBootScreen("WiFi Reset", "Restarting...");
+        delay(500);
         g_wifi.resetSettings();
     } 
     else if (cmd.equalsIgnoreCase("status")) {
         Logger::info("Main", "Serial command: status");
         g_wifi.printStatus();
-        Logger::info("Main", String("Free heap: ") + ESP.getFreeHeap() + " bytes");
-        Logger::info("Main", String("Uptime: ") + millis() + " ms");
+        displayWiFiStatus();
     }
     else if (cmd.equalsIgnoreCase("reboot")) {
         Logger::warning("Main", "Serial command: reboot");
-        Logger::info("Main", "Rebooting...");
+        displayBootScreen("Rebooting...");
         delay(500);
         ESP.restart();
     }
     else if (cmd.equalsIgnoreCase("heap")) {
         Logger::info("Main", "Serial command: heap");
         Logger::info("Main", String("Free heap: ") + ESP.getFreeHeap() + " bytes");
-        Logger::info("Main", String("Heap size: ") + ESP.getHeapSize() + " bytes");
-        Logger::info("Main", String("Min free heap: ") + ESP.getMinFreeHeap() + " bytes");
     }
     else {
-        Logger::info("Main", String("Unknown command: '") + cmd + "'");
-        Logger::info("Main", "Available: resetwifi, status, reboot, heap");
+        Logger::info("Main", String("Unknown: ") + cmd);
+        display.clearDisplay();
+        display.setCursor(0, 0);
+        display.println("Unknown: " + cmd);
+        display.println("Cmds: resetwifi");
+        display.println("       status");
+        display.println("       reboot");
+        display.display();
     }
 }
 
@@ -61,33 +126,42 @@ void setup() {
     Serial.begin(115200);
     delay(500);
     
-    // Immediate output before any initialization
     Serial.println("");
     Serial.println("========================================");
-    Serial.println("ESP32 Smart Weather Station - BOOTING");
+    Serial.println("ESP32 Smart Weather Station");
     Serial.println("========================================");
-    Serial.println("");
 
-    Logger::setMinLevel(LogLevel::DEBUG);
+    // Initialize I2C for OLED
+    Wire.begin(I2C_SDA, I2C_SCL);
+    
+    // Initialize display
+    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+        Serial.println("[Display] SSD1306 allocation failed!");
+        for (;;); // Don't proceed, loop forever
+    }
+    
+    Serial.println("[Display] SSD1306 initialized");
+    displayBootScreen("Starting...", "Weather Station");
+    delay(1000);
 
-    Logger::info("Main", "System starting...");
-    Logger::info("Main", String("Free heap: ") + ESP.getFreeHeap());
-
-    // WiFi (blocking during initial connect or portal)
-    Logger::info("Main", "Calling WiFi begin...");
-    Serial.println("[Main] About to call g_wifi.begin()");
+    // WiFi
+    Serial.println("[WiFi] Connecting...");
+    displayBootScreen("Connecting", "to WiFi...");
     
     bool wifiResult = g_wifi.begin();
     
-    Serial.println("[Main] WiFi begin returned: " + String(wifiResult));
-    Serial.println("[Main] WiFi IP: " + g_wifi.ip());
-    Logger::info("Main", String("WiFi connected! IP: ") + g_wifi.ip());
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("[WiFi] Connected!");
+        displayBootScreen("WiFi Connected!", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+    } else {
+        Serial.println("[WiFi] Failed!");
+        displayBootScreen("WiFi Failed!", "Check credentials");
+    }
+    
+    delay(2000);
 
-    Logger::info("Main", "Setup complete!");
-    Serial.println("");
-    Serial.println("========================================");
-    Serial.println("Setup complete - entering loop");
-    Serial.println("========================================");
+    Serial.println("Setup complete!");
+    Serial.println("Commands: resetwifi, status, reboot, heap");
 }
 
 // ---------------------------------------------------------------------------
@@ -95,6 +169,7 @@ void setup() {
 // ---------------------------------------------------------------------------
 void loop() {
     taskSerialCommands();
-    delay(100);
+    displayWiFiStatus();
+    delay(2000);
     yield();
 }
