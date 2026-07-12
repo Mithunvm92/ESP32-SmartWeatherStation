@@ -134,22 +134,23 @@ bool WiFiManagerExt::begin() {
     // Store instance for callbacks
     g_wifiInstance = this;
     
-    // Step 1: Reset WiFi state to ensure clean start
-    resetWiFiState();
+    // Step 1: Reset WiFi state completely
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect(true);
+    delay(100);
     
     // Step 2: Log current state
     logCurrentWiFiState();
     
-    // Step 3: Create WiFiManager instance
+    // Step 3: Create WiFiManager and configure
     WiFiManager wm;
-    wm.setDebugOutput(true);
     
-    // Step 4: Configure portal timeout - 0 = never timeout during debugging
-    wm.setConfigPortalTimeout(0);  // NEVER TIMEOUT while debugging
-    wm.setConnectTimeout(30);
+    // Never timeout - debug mode
+    wm.setConfigPortalTimeout(0);
+    wm.setConnectTimeout(15);
     wm.setBreakAfterConfig(true);
     
-    // Step 5: Configure AP callback with enhanced logging
+    // AP callback
     wm.setAPCallback([](WiFiManager* wmPtr) {
         if (g_wifiInstance) g_wifiInstance->portalActive_ = true;
         Logger::info(TAG, "");
@@ -159,33 +160,32 @@ bool WiFiManagerExt::begin() {
         Logger::info(TAG, String("SSID: ") + wmPtr->getConfigPortalSSID());
         Logger::info(TAG, "Password: weather123");
         Logger::info(TAG, "IP: 192.168.4.1");
-        Logger::info(TAG, "Connect from phone now!");
+        Logger::info(TAG, "Connect phone to this AP!");
         Logger::info(TAG, "====================================");
         Logger::info(TAG, "");
     });
     
-    // Step 6: Configure save config callback
+    // Save callback
     wm.setSaveConfigCallback([]() {
-        Logger::info(TAG, "*** CREDENTIALS SAVED TO NVS ***");
+        Logger::info(TAG, "*** CREDENTIALS SAVED ***");
     });
     
-    // Step 7: Try autoConnect with saved credentials first
-    Logger::info(TAG, "");
-    Logger::info(TAG, ">>> Trying saved credentials...");
     Logger::info(TAG, "");
     
-    bool ok = wm.autoConnect(WIFI_AP_NAME, WIFI_AP_PASSWORD);
+    // Step 4: Try saved credentials first
+    Logger::info(TAG, ">>> Trying saved WiFi...");
     
-    if (ok && WiFi.status() == WL_CONNECTED) {
-        // Connected successfully
+    bool connected = wm.autoConnect(WIFI_AP_NAME, WIFI_AP_PASSWORD);
+    
+    if (connected && WiFi.status() == WL_CONNECTED) {
+        // Success!
         portalActive_ = false;
         Logger::info(TAG, "");
         Logger::info(TAG, "====================================");
-        Logger::info(TAG, "         CONNECTED!                ");
+        Logger::info(TAG, "    WiFi CONNECTED!                ");
         Logger::info(TAG, "====================================");
         Logger::info(TAG, String("SSID: ") + WiFi.SSID());
         Logger::info(TAG, String("IP: ") + WiFi.localIP().toString());
-        Logger::info(TAG, String("Gateway: ") + WiFi.gatewayIP().toString());
         Logger::info(TAG, String("RSSI: ") + WiFi.RSSI() + " dBm");
         Logger::info(TAG, "====================================");
         Logger::info(TAG, "");
@@ -196,40 +196,42 @@ bool WiFiManagerExt::begin() {
         return true;
     }
     
-    // If we get here, either no saved creds or connection failed
-    // Check if portal is running
+    // Step 5: No saved creds or connection failed - start portal
     Logger::warning(TAG, "");
     Logger::warning(TAG, "====================================");
-    Logger::warning(TAG, "    Opening setup portal...         ");
+    Logger::warning(TAG, "   No saved WiFi / Connection failed");
+    Logger::warning(TAG, "   Starting Setup Portal...         ");
     Logger::warning(TAG, "====================================");
-    Logger::warning(TAG, "Portal SSID: WeatherStation-Setup");
-    Logger::warning(TAG, "Portal Password: weather123");
-    Logger::warning(TAG, "Portal IP: 192.168.4.1");
+    Logger::warning(TAG, String("AP SSID: ") + WIFI_AP_NAME);
+    Logger::warning(TAG, "AP Password: weather123");
+    Logger::warning(TAG, "AP IP: 192.168.4.1");
     Logger::warning(TAG, "");
     
-    // Block in portal mode - stays open until user configures
-    // DO NOT return from this function until connected or portal closes
-    while (true) {
-        delay(100);
-        yield();
+    // Start config portal - blocks until connected or timeout(0=never)
+    connected = wm.startConfigPortal(WIFI_AP_NAME, WIFI_AP_PASSWORD);
+    
+    if (connected && WiFi.status() == WL_CONNECTED) {
+        portalActive_ = false;
+        Logger::info(TAG, "");
+        Logger::info(TAG, "====================================");
+        Logger::info(TAG, "  WiFi CONNECTED AFTER CONFIG!    ");
+        Logger::info(TAG, "====================================");
+        Logger::info(TAG, String("SSID: ") + WiFi.SSID());
+        Logger::info(TAG, String("IP: ") + WiFi.localIP().toString());
+        Logger::info(TAG, "====================================");
         
-        // Check if connected after user saves credentials
-        if (WiFi.status() == WL_CONNECTED) {
-            portalActive_ = false;
-            Logger::info(TAG, "");
-            Logger::info(TAG, "====================================");
-            Logger::info(TAG, "   WiFi CONNECTED AFTER CONFIG!   ");
-            Logger::info(TAG, "====================================");
-            Logger::info(TAG, String("SSID: ") + WiFi.SSID());
-            Logger::info(TAG, String("IP: ") + WiFi.localIP().toString());
-            Logger::info(TAG, "====================================");
-            
-            wasConnected_ = true;
-            reconnectAttempts_ = 0;
-            connectedSinceEpoch_ = time(nullptr);
-            return true;
-        }
+        wasConnected_ = true;
+        reconnectAttempts_ = 0;
+        connectedSinceEpoch_ = time(nullptr);
+        return true;
     }
+    
+    // Portal closed without connecting - shouldn't happen with timeout=0
+    // But just in case, restart portal
+    Logger::warning(TAG, "Portal closed, restarting portal...");
+    delay(1000);
+    ESP.restart();
+    return false; // never reached
 }
 
 void WiFiManagerExt::checkConnection() {
