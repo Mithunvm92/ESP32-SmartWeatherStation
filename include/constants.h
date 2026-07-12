@@ -9,16 +9,16 @@
 // Scheduler intervals (milliseconds)
 // ---------------------------------------------------------------------------
 namespace Interval {
-    static constexpr uint32_t CLOCK_TICK_MS      = 1000UL;
-    static constexpr uint32_t WEATHER_MS         = 15UL * 60 * 1000;
-    static constexpr uint32_t FORECAST_MS        = 30UL * 60 * 1000;
-    static constexpr uint32_t DISASTER_MS        = 5UL * 60 * 1000;
-    static constexpr uint32_t DISPLAY_REFRESH_MS = 100UL;
-    static constexpr uint32_t WIFI_CHECK_MS      = 10UL * 1000;
-    static constexpr uint32_t NTP_RESYNC_MS      = 60UL * 60 * 1000;
-    static constexpr uint32_t PAGE_ROTATE_MS     = 60UL * 1000;
-    static constexpr uint32_t WATCHDOG_FEED_MS   = 5UL * 1000;
-    static constexpr uint32_t FLASH_BLINK_MS     = 500UL;
+    static constexpr uint32_t CLOCK_TICK_MS      = 1000UL;            // 1 s
+    static constexpr uint32_t WEATHER_MS         = 15UL * 60 * 1000;  // 15 min
+    static constexpr uint32_t FORECAST_MS        = 30UL * 60 * 1000;  // 30 min
+    static constexpr uint32_t DISASTER_MS        = 5UL * 60 * 1000;   // 5 min
+    static constexpr uint32_t DISPLAY_REFRESH_MS = 100UL;             // 100 ms
+    static constexpr uint32_t WIFI_CHECK_MS      = 10UL * 1000;       // 10 s
+    static constexpr uint32_t NTP_RESYNC_MS      = 60UL * 60 * 1000;  // 1 hr
+    static constexpr uint32_t PAGE_ROTATE_MS     = 60UL * 1000;       // 60 s
+    static constexpr uint32_t WATCHDOG_FEED_MS   = 5UL * 1000;        // 5 s
+    static constexpr uint32_t FLASH_BLINK_MS     = 500UL;             // 0.5 s
 }
 
 // ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ enum class Page : uint8_t {
     DISASTER,
     WIFI_INFO,
     SYSTEM_INFO,
-    PAGE_COUNT
+    PAGE_COUNT   // keep last
 };
 
 // ---------------------------------------------------------------------------

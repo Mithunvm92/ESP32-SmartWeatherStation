@@ -14,7 +14,9 @@ enum class LogLevel : uint8_t {
 
 class Logger {
 public:
+    // Set the minimum level that will be printed. Default: INFO.
     static void setMinLevel(LogLevel level);
+
     static void debug(const char* tag, const String& msg);
     static void info(const char* tag, const String& msg);
     static void warning(const char* tag, const String& msg);
